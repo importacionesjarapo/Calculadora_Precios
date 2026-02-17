@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Importaciones Jarapo</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+
+        .sidebar-active {
+            background: #0f172a;
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #10b981; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        .animate-pop {
+            animation: pop 0.3s cubic-bezier(0.26, 0.53, 0.74, 1.48);
+        }
+        @keyframes pop {
+            0% { transform: scale(0.95); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-overlay {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const Icon = ({ name, className }) => {
+            useEffect(() => {
+                if (window.lucide) lucide.createIcons();
+            }, [name, className]);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const App = () => {
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [showPinModal, setShowPinModal] = useState(false);
+            const [showHistory, setShowHistory] = useState(false);
+            const [pinInput, setPinInput] = useState("");
+            const [history, setHistory] = useState([]);
+            const ADMIN_PIN = "1329";
+
+            const [mode, setMode] = useState('calzado'); 
+            const [trm, setTrm] = useState(3700); 
+            const [valorNetoUsd, setValorNetoUsd] = useState(10);
+            const [aplicaEnvioGratis, setAplicaEnvioGratis] = useState(true);
+
+            const [masterConfig, setMasterConfig] = useState({
+                taxUsa: 7,
+                comisionTC: 3,
+                valorLibra: 11100,
+                costoDomicilio: 20000,
+                categorias: {
+                    calzado: { label: 'Calzado', icon: 'footprints', ganancia: 100000, peso: 4 },
+                    botas: { label: 'Botas', icon: 'mountain', ganancia: 100000, peso: 6 },
+                    infantil: { label: 'Infantil', icon: 'baby', ganancia: 70000, peso: 2 },
+                    salud: { label: 'Salud', icon: 'pill', ganancia: 50000, peso: 2 },
+                    ropa: { label: 'Ropa', icon: 'shirt', ganancia: 50000, peso: 1 },
+                    abrigos: { label: 'Abrigos', icon: 'pocket', ganancia: 65000, peso: 4 },
+                    general: { label: 'General', icon: 'sliders', ganancia: 50000, peso: 1 }
+                }
+            });
+
+            const handleLogin = () => {
+                if (pinInput === ADMIN_PIN) {
+                    setIsAdmin(true);
+                    setShowPinModal(false);
+                    setPinInput("");
+                } else {
+                    alert("PIN Incorrecto");
+                    setPinInput("");
+                }
+            };
+
+            const toggleAdmin = () => {
+                if (isAdmin) setIsAdmin(false);
+                else setShowPinModal(true);
+            };
+
+            // Función para actualizar parámetros permitiendo que el valor sea string vacío temporalmente
+            const updateCategoryParam = (catKey, param, rawValue) => {
+                setMasterConfig(prev => ({
+                    ...prev,
+                    categorias: {
+                        ...prev.categorias,
+                        [catKey]: {
+                            ...prev.categorias[catKey],
+                            [param]: rawValue === "" ? "" : parseFloat(rawValue)
+                        }
+                    }
+                }));
+            };
+
+            const res = useMemo(() => {
+                const conf = masterConfig.categorias[mode];
+                const nUsd = parseFloat(valorNetoUsd) || 0;
+                const nTrm = parseFloat(trm) || 0;
+                
+                // Normalizamos valores para el cálculo (si están vacíos tratarlos como 0)
+                const cPeso = parseFloat(conf.peso) || 0;
+                const cGanancia = parseFloat(conf.ganancia) || 0;
+
+                const valorConTax = nUsd * (1 + (masterConfig.taxUsa / 100));
+                const pesosBase = valorConTax * nTrm;
+                const pesosConComision = pesosBase * (1 + (masterConfig.comisionTC / 100));
+                const costoLogistica = cPeso * masterConfig.valorLibra;
+                const costoEnvio = aplicaEnvioGratis ? masterConfig.costoDomicilio : 0;
+                
+                return {
+                    total: pesosConComision + cGanancia + costoLogistica + costoEnvio,
+                    pesosConTax: pesosBase,
+                    comisionVal: pesosConComision - pesosBase,
+                    logisticaTotal: costoLogistica + costoEnvio,
+                    ganancia: cGanancia
+                };
+            }, [mode, valorNetoUsd, trm, aplicaEnvioGratis, masterConfig]);
+
+            const cop = (v) => new Intl.NumberFormat('es-CO', { 
+                style: 'currency', 
+                currency: 'COP', 
+                maximumFractionDigits: 0 
+            }).format(v);
+
+            const saveToHistory = () => {
+                const newItem = {
+                    id: Date.now(),
+                    timestamp: new Date().toLocaleTimeString(),
+                    categoria: masterConfig.categorias[mode].label,
+                    valorUsd: valorNetoUsd,
+                    total: res.total
+                };
+                setHistory([newItem, ...history]);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
+                    
+                    {/* Barra Lateral */}
+                    <nav className="w-full md:w-24 bg-white border-r border-slate-200 p-3 md:p-4 flex flex-row md:flex-col items-center gap-2 overflow-x-auto md:overflow-y-auto no-scrollbar z-10">
+                        <div className="hidden md:flex flex-col items-center mb-6">
+                            <button 
+                                onClick={toggleAdmin}
+                                title="Panel de Administración"
+                                className={`p-3 rounded-2xl transition-all ${isAdmin ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
+                            >
+                                <Icon name={isAdmin ? "unlock" : "lock"} className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {Object.keys(masterConfig.categorias).map(key => (
+                            <button 
+                                key={key}
+                                onClick={() => setMode(key)}
+                                className={`flex-1 md:w-full py-4 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all shrink-0 ${mode === key ? 'sidebar-active' : 'text-slate-400 hover:bg-slate-50'}`}
+                            >
+                                <Icon name={masterConfig.categorias[key].icon} className="w-5 h-5" />
+                                <span className="text-[8px] font-bold uppercase tracking-tight">{masterConfig.categorias[key].label}</span>
+                            </button>
+                        ))}
+
+                        <button 
+                            onClick={() => setShowHistory(!showHistory)}
+                            className="flex-1 md:w-full py-4 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all shrink-0 text-slate-400 hover:bg-slate-50 md:mt-auto"
+                        >
+                            <Icon name="history" className="w-5 h-5" />
+                            <span className="text-[8px] font-bold uppercase tracking-tight">Historial</span>
+                        </button>
+                    </nav>
+
+                    <main className="flex-1 p-4 md:p-8 max-w-6xl mx-auto w-full space-y-6">
+                        
+                        <header className="flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-slate-900 p-2 rounded-xl">
+                                    <Icon name="package" className="text-white w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-black text-slate-900 leading-tight">Importaciones Jarapo</h1>
+                                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{masterConfig.categorias[mode].label}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                                <button onClick={toggleAdmin} className="md:hidden p-2 rounded-xl bg-slate-100 text-slate-500">
+                                    <Icon name={isAdmin ? "unlock" : "lock"} className="w-5 h-5" />
+                                </button>
+                                <div className="text-right">
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase block">TRM</span>
+                                    <div className="flex items-center gap-1 text-sm font-black text-slate-700">
+                                        <span className="text-emerald-500">$</span>
+                                        <input 
+                                            type="number" 
+                                            value={trm === 0 ? "" : trm} 
+                                            onChange={e => setTrm(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                                            className="w-14 outline-none text-right bg-transparent"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            
+                            <div className="lg:col-span-7 space-y-6">
+                                
+                                {/* Panel Administrador Consolidado */}
+                                {isAdmin && (
+                                    <div className="bg-white rounded-[2rem] p-6 border-2 border-emerald-500/20 shadow-xl animate-pop overflow-hidden">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-sm font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
+                                                <Icon name="settings" className="w-4 h-4" /> Panel Maestro
+                                            </h3>
+                                            <button onClick={() => setIsAdmin(false)} className="text-[10px] font-bold bg-slate-100 px-3 py-1 rounded-full text-slate-500 uppercase">Cerrar</button>
+                                        </div>
+
+                                        <div className="mb-8">
+                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <div className="w-1 h-3 bg-emerald-500 rounded-full"></div> 1. Valores Globales
+                                            </h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                {[
+                                                    { label: 'Tax USA (%)', key: 'taxUsa' },
+                                                    { label: 'Comisión (%)', key: 'comisionTC' },
+                                                    { label: 'Libra ($)', key: 'valorLibra' },
+                                                    { label: 'Domicilio ($)', key: 'costoDomicilio' }
+                                                ].map(item => (
+                                                    <div key={item.key} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">{item.label}</label>
+                                                        <input 
+                                                            type="number" 
+                                                            value={masterConfig[item.key] === 0 ? "" : masterConfig[item.key]} 
+                                                            onChange={e => setMasterConfig({...masterConfig, [item.key]: e.target.value === "" ? "" : parseFloat(e.target.value)})} 
+                                                            className="w-full bg-transparent font-black text-sm outline-none text-slate-700" 
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <div className="w-1 h-3 bg-indigo-500 rounded-full"></div> 2. Matriz de Pesos y Ganancias
+                                            </h4>
+                                            <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-slate-50">
+                                                <table className="w-full text-left text-xs border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-slate-100 text-slate-500 uppercase font-black text-[9px]">
+                                                            <th className="p-3">Categoría</th>
+                                                            <th className="p-3">Peso (Lb)</th>
+                                                            <th className="p-3">Ganancia ($)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {Object.keys(masterConfig.categorias).map(key => (
+                                                            <tr key={key} className={mode === key ? "bg-emerald-50/50" : ""}>
+                                                                <td className="p-3 font-bold text-slate-600 flex items-center gap-2">
+                                                                    <Icon name={masterConfig.categorias[key].icon} className="w-3 h-3" />
+                                                                    {masterConfig.categorias[key].label}
+                                                                </td>
+                                                                <td className="p-2">
+                                                                    <input 
+                                                                        type="number"
+                                                                        value={masterConfig.categorias[key].peso === 0 ? "" : masterConfig.categorias[key].peso}
+                                                                        onChange={e => updateCategoryParam(key, 'peso', e.target.value)}
+                                                                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 font-bold outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-2">
+                                                                    <input 
+                                                                        type="number"
+                                                                        value={masterConfig.categorias[key].ganancia === 0 ? "" : masterConfig.categorias[key].ganancia}
+                                                                        onChange={e => updateCategoryParam(key, 'ganancia', e.target.value)}
+                                                                        className="w-full bg-white border border-slate-200 rounded-lg p-1.5 font-bold outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-slate-200">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                            Cotización {masterConfig.categorias[mode].label}
+                                        </h2>
+                                        <div className="text-right">
+                                             <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block">Ganancia Actual</span>
+                                             <span className="text-sm font-black text-slate-900">{cop(res.ganancia)}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-6">
+                                        <div className="relative">
+                                            <label className="text-[11px] font-bold text-slate-500 mb-2 block ml-1">Costo Neto Tienda (USD)</label>
+                                            <div className="flex items-center bg-slate-50 rounded-2xl border border-slate-100 focus-within:border-slate-900 focus-within:ring-4 focus-within:ring-slate-900/5 transition-all">
+                                                <span className="pl-6 text-2xl font-black text-slate-300">$</span>
+                                                <input 
+                                                    type="number" 
+                                                    inputMode="decimal"
+                                                    value={valorNetoUsd === 0 ? "" : valorNetoUsd}
+                                                    onChange={e => setValorNetoUsd(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                                                    className="w-full bg-transparent p-6 pl-2 text-4xl font-black text-slate-800 outline-none"
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-white p-2 rounded-xl shadow-sm">
+                                                        <Icon name="scale" className="w-5 h-5 text-blue-500" />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-xs font-bold text-slate-700 block leading-tight">Peso (Lbs)</span>
+                                                        <span className="text-[10px] text-slate-400 font-medium">
+                                                            {mode === 'general' ? 'Editable' : 'Configurado'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {mode === 'general' ? (
+                                                    <input 
+                                                        type="number"
+                                                        value={masterConfig.categorias.general.peso === 0 ? "" : masterConfig.categorias.general.peso}
+                                                        onChange={e => updateCategoryParam('general', 'peso', e.target.value)}
+                                                        className="w-16 bg-white border border-slate-200 rounded-lg p-2 text-center font-black text-slate-800 outline-none"
+                                                    />
+                                                ) : (
+                                                    <span className="text-sm font-black text-slate-700 bg-white px-3 py-1 rounded-lg shadow-sm border border-slate-100">
+                                                        {masterConfig.categorias[mode].peso} Lbs
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-white p-2 rounded-xl shadow-sm">
+                                                        <Icon name="banknote" className="w-5 h-5 text-emerald-500" />
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-xs font-bold text-slate-700 block leading-tight">Ganancia ($)</span>
+                                                        <span className="text-[10px] text-slate-400 font-medium">
+                                                            {mode === 'general' ? 'Edición rápida' : 'Predefinida'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {mode === 'general' ? (
+                                                    <input 
+                                                        type="number"
+                                                        value={masterConfig.categorias.general.ganancia === 0 ? "" : masterConfig.categorias.general.ganancia}
+                                                        onChange={e => updateCategoryParam('general', 'ganancia', e.target.value)}
+                                                        className="w-24 bg-white border border-slate-200 rounded-lg p-2 text-center font-black text-slate-800 outline-none"
+                                                    />
+                                                ) : (
+                                                    <span className="text-sm font-black text-slate-700 bg-white px-3 py-1 rounded-lg shadow-sm border border-slate-100">
+                                                        {cop(masterConfig.categorias[mode].ganancia)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-slate-900 rounded-2xl flex items-center justify-between shadow-lg">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-white/10 p-2 rounded-xl">
+                                                    <Icon name="truck" className="w-5 h-5 text-emerald-400" />
+                                                </div>
+                                                <div>
+                                                    <span className="text-xs font-bold text-white block leading-tight">Domicilio Incluido</span>
+                                                    <span className="text-[10px] text-white/40 font-medium">Costo: {cop(masterConfig.costoDomicilio)}</span>
+                                                </div>
+                                            </div>
+                                            <label className="switch">
+                                                <input type="checkbox" checked={aplicaEnvioGratis} onChange={e => setAplicaEnvioGratis(e.target.checked)} />
+                                                <span className="slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-5 space-y-6">
+                                <div className="result-card rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col items-center justify-center min-h-[300px]">
+                                    <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -mr-24 -mt-24 blur-3xl"></div>
+                                    
+                                    <div className="relative z-10 w-full text-center">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-2 block">Precio al Cliente</span>
+                                        <div className="text-6xl font-black tracking-tighter mb-8 tabular-nums">
+                                            {cop(res.total)}
+                                        </div>
+                                        
+                                        <button 
+                                            onClick={saveToHistory}
+                                            className="w-full bg-white text-slate-900 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center gap-2 shadow-xl"
+                                        >
+                                            <Icon name="save" className="w-4 h-4" /> Guardar Cotización
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {isAdmin && (
+                                    <div className="bg-white rounded-3xl p-6 border border-emerald-100 animate-pop">
+                                        <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4">Análisis de Costos</h4>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between text-xs font-bold text-slate-600">
+                                                <span>Costo Base + Tax:</span>
+                                                <span>{cop(res.pesosConTax)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-bold text-slate-600">
+                                                <span>Comisión Pasarela:</span>
+                                                <span>{cop(res.comisionVal)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-bold text-slate-600">
+                                                <span>Logística Total:</span>
+                                                <span>{cop(res.logisticaTotal)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-black text-emerald-600 pt-2 border-t border-slate-50">
+                                                <span>Ganancia Configurada:</span>
+                                                <span>{cop(res.ganancia)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {showHistory && (
+                                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 animate-pop">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Historial</h3>
+                                            <button onClick={() => setHistory([])} className="text-[10px] font-bold text-rose-500 uppercase">Limpiar</button>
+                                        </div>
+                                        
+                                        <div className="space-y-3 max-h-60 overflow-y-auto pr-2 no-scrollbar">
+                                            {history.length === 0 ? (
+                                                <p className="text-center py-8 text-slate-300 text-xs font-bold italic">Sin registros</p>
+                                            ) : (
+                                                history.map(item => (
+                                                    <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                                                        <div>
+                                                            <span className="text-[9px] font-black text-slate-400 block">{item.timestamp} - {item.categoria}</span>
+                                                            <span className="text-xs font-bold text-slate-600">{item.valorUsd} USD</span>
+                                                        </div>
+                                                        <span className="text-sm font-black text-slate-900">{cop(item.total)}</span>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* Modal PIN */}
+                    {showPinModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 modal-overlay">
+                            <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-pop">
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <Icon name="lock" className="text-white w-8 h-8" />
+                                    </div>
+                                    <h2 className="text-xl font-black text-slate-900">Panel Maestro</h2>
+                                    <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest">Ingresa el PIN para editar</p>
+                                </div>
+                                <input 
+                                    type="password" 
+                                    value={pinInput}
+                                    onChange={e => setPinInput(e.target.value)}
+                                    placeholder="••••"
+                                    className="w-full bg-slate-100 border-none p-5 rounded-2xl text-center text-3xl font-black tracking-[1em] mb-4 outline-none focus:ring-4 focus:ring-slate-900/5"
+                                    autoFocus
+                                    onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                                />
+                                <div className="flex gap-3">
+                                    <button onClick={() => setShowPinModal(false)} className="flex-1 py-4 font-bold text-slate-400">Cancelar</button>
+                                    <button onClick={handleLogin} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg">Entrar</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
